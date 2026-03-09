@@ -1,62 +1,80 @@
 import java.util.*;
 
-class TrieNode {
-    Map<Character, TrieNode> children = new HashMap<>();
-    boolean isEnd;
-    int frequency;
-    String word;
+class VideoData {
+    String videoId;
+    String data;
+    VideoData(String videoId, String data) {
+        this.videoId = videoId;
+        this.data = data;
+    }
 }
 
 public class Problems1 {
-    private static final TrieNode root = new TrieNode();
-    private static final Map<String, Integer> globalStats = new HashMap<>();
+    private static final int L1_CAPACITY = 10000;
+    private static final int L2_CAPACITY = 100000;
 
-    public static void insert(String query, int freq) {
-        globalStats.put(query, globalStats.getOrDefault(query, 0) + freq);
-        TrieNode node = root;
-        for (char c : query.toCharArray()) {
-            node = node.children.computeIfAbsent(c, k -> new TrieNode());
+    private static final LinkedHashMap<String, VideoData> L1 = new LinkedHashMap<>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(Map.Entry<String, VideoData> eldest) {
+            return size() > L1_CAPACITY;
         }
-        node.isEnd = true;
-        node.frequency = globalStats.get(query);
-        node.word = query;
+    };
+
+    private static final LinkedHashMap<String, VideoData> L2 = new LinkedHashMap<>(16, 0.75f, true) {
+        protected boolean removeEldestEntry(Map.Entry<String, VideoData> eldest) {
+            return size() > L2_CAPACITY;
+        }
+    };
+
+    private static final Map<String, Integer> accessCount = new HashMap<>();
+    private static int L1Hits = 0, L2Hits = 0, L3Hits = 0, totalRequests = 0;
+    private static double L1Time = 0.5, L2Time = 5, L3Time = 150;
+
+    public static VideoData getVideo(String videoId) {
+        totalRequests++;
+        if (L1.containsKey(videoId)) {
+            L1Hits++;
+            return L1.get(videoId);
+        }
+        if (L2.containsKey(videoId)) {
+            L2Hits++;
+            VideoData data = L2.get(videoId);
+            promoteToL1(videoId, data);
+            return data;
+        }
+        L3Hits++;
+        VideoData data = queryDatabase(videoId);
+        L2.put(videoId, data);
+        accessCount.put(videoId, 1);
+        return data;
     }
 
-    public static List<String> search(String prefix) {
-        TrieNode node = root;
-        for (char c : prefix.toCharArray()) {
-            node = node.children.get(c);
-            if (node == null) return Collections.emptyList();
+    private static void promoteToL1(String videoId, VideoData data) {
+        int count = accessCount.getOrDefault(videoId, 0) + 1;
+        accessCount.put(videoId, count);
+        if (count > 3) {
+            L1.put(videoId, data);
         }
-        PriorityQueue<TrieNode> pq = new PriorityQueue<>((a, b) -> b.frequency - a.frequency);
-        collect(node, pq);
-        List<String> results = new ArrayList<>();
-        int count = 0;
-        while (!pq.isEmpty() && count < 10) {
-            TrieNode n = pq.poll();
-            results.add(n.word + " (" + n.frequency + " searches)");
-            count++;
-        }
-        return results;
     }
 
-    private static void collect(TrieNode node, PriorityQueue<TrieNode> pq) {
-        if (node.isEnd) pq.add(node);
-        for (TrieNode child : node.children.values()) {
-            collect(child, pq);
-        }
+    private static VideoData queryDatabase(String videoId) {
+        return new VideoData(videoId, "VideoContent_" + videoId);
+    }
+
+    public static String getStatistics() {
+        double L1Rate = totalRequests == 0 ? 0 : (L1Hits * 100.0 / totalRequests);
+        double L2Rate = totalRequests == 0 ? 0 : (L2Hits * 100.0 / totalRequests);
+        double L3Rate = totalRequests == 0 ? 0 : (L3Hits * 100.0 / totalRequests);
+        double avgTime = (L1Hits * L1Time + L2Hits * L2Time + L3Hits * L3Time) / totalRequests;
+        return "L1: Hit Rate " + String.format("%.2f", L1Rate) + "%, Avg Time: " + L1Time + "ms\n" +
+                "L2: Hit Rate " + String.format("%.2f", L2Rate) + "%, Avg Time: " + L2Time + "ms\n" +
+                "L3: Hit Rate " + String.format("%.2f", L3Rate) + "%, Avg Time: " + L3Time + "ms\n" +
+                "Overall: Hit Rate " + String.format("%.2f", (L1Rate + L2Rate + L3Rate)) + "%, Avg Time: " + String.format("%.2f", avgTime) + "ms";
     }
 
     public static void main(String[] args) {
-        insert("java tutorial", 1234567);
-        insert("javascript", 987654);
-        insert("java download", 456789);
-        insert("javelin throw", 12345);
-        insert("japan travel", 67890);
-
-        List<String> suggestions = search("jav");
-        for (int i = 0; i < suggestions.size(); i++) {
-            System.out.println((i + 1) + ". " + suggestions.get(i));
-        }
+        System.out.println(getVideo("video_123").data);
+        System.out.println(getVideo("video_123").data);
+        System.out.println(getVideo("video_999").data);
+        System.out.println(getStatistics());
     }
 }
