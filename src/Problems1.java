@@ -1,62 +1,69 @@
 import java.util.*;
 
-class TrieNode {
-    Map<Character, TrieNode> children = new HashMap<>();
-    boolean isEnd;
-    int frequency;
-    String word;
+class ParkingSpot {
+    String licensePlate;
+    long entryTime;
+    boolean occupied;
 }
 
 public class Problems1 {
-    private static final TrieNode root = new TrieNode();
-    private static final Map<String, Integer> globalStats = new HashMap<>();
+    private static final int SIZE = 500;
+    private static final ParkingSpot[] lot = new ParkingSpot[SIZE];
+    private static int totalVehicles = 0;
+    private static int totalProbes = 0;
+    private static final Map<Integer, Integer> hourlyOccupancy = new HashMap<>();
 
-    public static void insert(String query, int freq) {
-        globalStats.put(query, globalStats.getOrDefault(query, 0) + freq);
-        TrieNode node = root;
-        for (char c : query.toCharArray()) {
-            node = node.children.computeIfAbsent(c, k -> new TrieNode());
-        }
-        node.isEnd = true;
-        node.frequency = globalStats.get(query);
-        node.word = query;
+    private static int hash(String plate) {
+        return Math.abs(plate.hashCode()) % SIZE;
     }
 
-    public static List<String> search(String prefix) {
-        TrieNode node = root;
-        for (char c : prefix.toCharArray()) {
-            node = node.children.get(c);
-            if (node == null) return Collections.emptyList();
+    public static String parkVehicle(String plate) {
+        int index = hash(plate);
+        int probes = 0;
+        while (lot[index] != null && lot[index].occupied) {
+            index = (index + 1) % SIZE;
+            probes++;
         }
-        PriorityQueue<TrieNode> pq = new PriorityQueue<>((a, b) -> b.frequency - a.frequency);
-        collect(node, pq);
-        List<String> results = new ArrayList<>();
-        int count = 0;
-        while (!pq.isEmpty() && count < 10) {
-            TrieNode n = pq.poll();
-            results.add(n.word + " (" + n.frequency + " searches)");
-            count++;
-        }
-        return results;
+        if (lot[index] == null) lot[index] = new ParkingSpot();
+        lot[index].licensePlate = plate;
+        lot[index].entryTime = System.currentTimeMillis();
+        lot[index].occupied = true;
+        totalVehicles++;
+        totalProbes += probes;
+        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        hourlyOccupancy.put(hour, hourlyOccupancy.getOrDefault(hour, 0) + 1);
+        return "Assigned spot #" + index + " (" + probes + " probes)";
     }
 
-    private static void collect(TrieNode node, PriorityQueue<TrieNode> pq) {
-        if (node.isEnd) pq.add(node);
-        for (TrieNode child : node.children.values()) {
-            collect(child, pq);
+    public static String exitVehicle(String plate) {
+        int index = hash(plate);
+        while (lot[index] != null) {
+            if (lot[index].occupied && lot[index].licensePlate.equals(plate)) {
+                lot[index].occupied = false;
+                long duration = System.currentTimeMillis() - lot[index].entryTime;
+                double hours = duration / 3600000.0;
+                double fee = hours * 5.0;
+                totalVehicles--;
+                return "Spot #" + index + " freed, Duration: " + String.format("%.2f", hours) + "h, Fee: $" + String.format("%.2f", fee);
+            }
+            index = (index + 1) % SIZE;
         }
+        return "Vehicle not found";
     }
 
-    public static void main(String[] args) {
-        insert("java tutorial", 1234567);
-        insert("javascript", 987654);
-        insert("java download", 456789);
-        insert("javelin throw", 12345);
-        insert("japan travel", 67890);
+    public static String getStatistics() {
+        double occupancy = (totalVehicles * 100.0) / SIZE;
+        double avgProbes = totalVehicles == 0 ? 0 : (totalProbes * 1.0 / totalVehicles);
+        int peakHour = hourlyOccupancy.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(-1);
+        return "Occupancy: " + String.format("%.2f", occupancy) + "%, Avg Probes: " + String.format("%.2f", avgProbes) + ", Peak Hour: " + peakHour;
+    }
 
-        List<String> suggestions = search("jav");
-        for (int i = 0; i < suggestions.size(); i++) {
-            System.out.println((i + 1) + ". " + suggestions.get(i));
-        }
+    public static void main(String[] args) throws InterruptedException {
+        System.out.println(parkVehicle("ABC-1234"));
+        System.out.println(parkVehicle("ABC-1235"));
+        System.out.println(parkVehicle("XYZ-9999"));
+        Thread.sleep(2000);
+        System.out.println(exitVehicle("ABC-1234"));
+        System.out.println(getStatistics());
     }
 }
